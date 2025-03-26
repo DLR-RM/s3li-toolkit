@@ -1,0 +1,13 @@
+bokeh==3.4.3
+pandas==2.2.3
+numpy==1.23.1
+matplotlib==3.9.4
+opencv-python==4.11.0.86
+progressbar2==4.5.0
+pyquaternion==0.9.9
+shapely==2.0.7
+pyproj==3.6.1
+filelock==3.18.0
+networkx==3.2.1
+typing_extensions==4.12.2
+PyYAML==6.0.2
