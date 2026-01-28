@@ -1,6 +1,8 @@
 # S3LI Interface
 This package provides useful tools and scripts for playback and preparation of the  S3LI dataset. 
 
+** Are you looking for the S3LI-Vulcano release? Stay tuned, code is going to be updated soon.. **
+
 Links: 
 - https://datasets.arches-projekt.de/s3li_dataset/
 - https://ieeexplore.ieee.org/document/9813579
