@@ -4,7 +4,7 @@ This package provides useful tools and scripts for playback and preparation of t
 This repo relates to the **S3LI Vulcano** release, for the Etna dataset, go back to the main branch. 
 
 Links: 
-- https://datasets.arches-projekt.de/s3li_dataset/
+- https://rmc.dlr.de/s3li_dataset  <-- Download dataset here!
 - https://arxiv.org/abs/2601.19557
 - https://ieeexplore.ieee.org/document/9813579
 
