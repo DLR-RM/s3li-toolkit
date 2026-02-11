@@ -1,25 +1,35 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 
 import pandas as pd
-from cv_bridge import CvBridge
-import rosbag
-import rospy
 import argparse
 import sys
 import numpy as np
-from datetime import datetime
-import sensor_msgs.point_cloud2 as pc2
+from datetime import datetime, timedelta
+import pytz
+import yaml
 import matplotlib.pyplot as plt
 from pyquaternion import Quaternion
-from sensor_msgs.msg import CameraInfo
 import math
 import os
 import cv2
 import progressbar
 
+import sequences_definition
+from rosbags.highlevel import AnyReader
+from rosbags.typesys import Stores, get_typestore
+from pathlib import Path
 from pyproj import Proj, Transformer
 
 run = os.system
+
+from dataclasses import dataclass
+
+@dataclass
+class CameraInfo:
+    K: float = -1.0
+    D: float = -1.0
+    width: int = -1
+    height: int = -1
 
 def compute_direction(lat1, lat2, lon1, lon2):
     dLon = lon2 - lon1
@@ -29,7 +39,7 @@ def compute_direction(lat1, lat2, lon1, lon2):
     return np.array([x, y, bearing])
 
 # Compute associations
-def find_correspondences(seq_name, out_path, left_cinfo, lidar_topic, bagfile,
+def find_correspondences(seq_name, out_path, left_cinfo, lidar_topic, bagfile_path,
                          image_buffer, lidar_buffer, gps_buffer, imu_buffer,
                          yaw_offset, lidar_offset, visualize):
 
@@ -49,110 +59,112 @@ def find_correspondences(seq_name, out_path, left_cinfo, lidar_topic, bagfile,
     print(f"Number of scans: {len(lidar_buffer)}")
     print(f"Number of gnss_points: {len(gps_buffer)}")
 
-    progress = create_progressbar()
-    progress.start()
+    with AnyReader([Path(bagfile_path)], default_typestore=get_typestore(Stores.ROS1_NOETIC)) as reader:
 
-    # Pair with imu (TODO: first loop through images, then associate SLAM pose)
-    imu_stamp = None
-    for id_imu, imu_data in enumerate(imu_buffer):
-        imu_stamp = imu_data[0]
+        progress = create_progressbar()
+        progress.start()
 
-        # Look for closest image
-        image_closest_index, image_closest_stamp = min(enumerate(image_buffer), key=lambda x: abs(x[1][0] - imu_stamp))
-        if abs(image_closest_stamp[0] - imu_stamp) > 0.03:
-            continue
+        # Pair with imu (TODO: first loop through images, then associate SLAM pose)
+        imu_stamp = None
+        n_imu_sample = len(imu_buffer)
+        for id_imu, imu_data in enumerate(imu_buffer):
+            imu_stamp = imu_data[0]
 
-        # Look for closest scan (and seek bagfile for single scan, otherwise memory blows up)
-        scan_closest_index, scan_closest_stamp = min(enumerate(lidar_buffer), key=lambda x: abs(x[1][0] - image_closest_stamp[0]))
-        if abs(scan_closest_stamp[0] - image_closest_stamp[0]) > 0.1:
-            continue
-        scan = seek_lidar_message_with_id_in_bagfile(bagfile, lidar_buffer[scan_closest_index][1],
-                                                     lidar_buffer[scan_closest_index][0],
-                                                     lidar_topic, lidar_offset)
-        # TODO: undistort lidar scan after interpolation of SLAM poses
+            # Look for closest image
+            image_closest_index, image_closest_stamp = min(enumerate(image_buffer), key=lambda x: abs(x[1][0] - imu_stamp))
+            if abs(image_closest_stamp[0] - imu_stamp) > 0.1:
+                continue
 
-        # Look for closest GPS
-        gps_closest_index, gps_closest_stamp = min(enumerate(gps_buffer), key=lambda x: abs(x[1][4] - imu_stamp))
-        if abs(gps_closest_stamp[4] - imu_stamp) > 1.0:
-            continue
+            # Look for closest scan (and seek bagfile for single scan, otherwise memory blows up)
+            scan_closest_index, scan_closest_stamp = min(enumerate(lidar_buffer), key=lambda x: abs(x[1][0] - image_closest_stamp[0]))
+            if abs(scan_closest_stamp[0] - image_closest_stamp[0]) > 0.3:
+                continue
+            scan = seek_lidar_message_with_id_in_bagfile(reader, lidar_buffer[scan_closest_index][1],
+                                                        lidar_buffer[scan_closest_index][0],
+                                                        lidar_topic, lidar_offset)
+            # TODO: undistort lidar scan after interpolation of SLAM poses
 
-        img_lidar_overlay = cv2.imread(image_buffer[image_closest_index][1])
-        img_lidar_overlay_orig = cv2.imread(image_buffer[image_closest_index][1])
-        points = scan[1]
+            # Look for closest GPS
+            gps_closest_index, gps_closest_stamp = min(enumerate(gps_buffer), key=lambda x: abs(x[1][4] - imu_stamp))
+            if abs(gps_closest_stamp[4] - imu_stamp) > 1.0:
+                progress.update(id_imu / n_imu_sample * 100.0)
+                continue
 
-        pts = list(x[0:3] for i, x in enumerate(points) if  (x[3] > 15.0 and abs(x[2]) < 7.0))
+            img_lidar_overlay = cv2.imread(image_buffer[image_closest_index][1])
+            img_lidar_overlay_orig = cv2.imread(image_buffer[image_closest_index][1])
+            points = scan[1]
 
-        trep = np.tile(t, (len(pts), 1))
+            pts = list(x[0:3] for i, x in enumerate(points) if  x[3] > 15.0)
 
-        try:
+            if len(pts) == 0:
+                progress.update(id_imu / n_imu_sample * 100.0)
+                continue
+
+            trep = np.tile(t, (len(pts), 1))
+
             pts_cam = np.add(np.dot(q.rotation_matrix, np.transpose(pts)), np.transpose(trep))
             max_dist = np.max(pts_cam[2, :])
             min_dist = np.min(pts_cam[2, :])
-        except:
-            print("Error")
-            continue
 
-        left_cinfo.K = np.array([577.331309, 0.0, 353.747907, 0.0, 577.326066, 256.683265, 0.0, 0.0, 1.0]).reshape((3,3))
+            for pt in np.transpose(pts_cam):
+                pt_u = left_cinfo.K[0][0] * pt[0] / \
+                    pt[2] + left_cinfo.K[0][2]
+                pt_v = left_cinfo.K[1][1] * pt[1] / \
+                    pt[2] + left_cinfo.K[1][2]
+                cmap_pos = np.floor(
+                    (pt[2] - min_dist) / max_dist * float(len(colors)))
+                if cmap_pos >= len(colors):
+                    cmap_pos = len(colors) - 1
+                color = np.floor(255 * colors[int(cmap_pos)][0:3])
+                cv2.circle(img_lidar_overlay, (int(pt_u), int(
+                    pt_v)), 3, (0, 0, 0), cv2.FILLED, cv2.LINE_8)
+                cv2.circle(img_lidar_overlay, (int(pt_u), int(pt_v)), 2, (color[2], color[1], color[0]),
+                        cv2.FILLED)
 
-        for pt in np.transpose(pts_cam):
-            pt_u = left_cinfo.K[0][0] * pt[0] / \
-                pt[2] + left_cinfo.K[0][2]
-            pt_v = left_cinfo.K[1][1] * pt[1] / \
-                pt[2] + left_cinfo.K[1][2]
-            cmap_pos = np.floor(
-                (pt[2] - min_dist) / max_dist * float(len(colors)))
-            if cmap_pos >= len(colors):
-                cmap_pos = len(colors) - 1
-            color = np.floor(255 * colors[int(cmap_pos)][0:3])
-            cv2.circle(img_lidar_overlay, (int(pt_u), int(
-                pt_v)), 3, (0, 0, 0), cv2.FILLED, cv2.LINE_8)
-            cv2.circle(img_lidar_overlay, (int(pt_u), int(pt_v)), 2, (color[2], color[1], color[0]),
-                    cv2.FILLED)
+            dst = cv2.addWeighted(img_lidar_overlay, .5, img_lidar_overlay_orig,
+                                (1 - .5), 0.0)
+            cv2.putText(dst, "t_diff: %.3f s" % (abs(image_closest_stamp[0] - scan_closest_stamp[0])),
+                        (10, 30), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 1,
+                        cv2.LINE_AA)
+            cv2.putText(dst, "t_OFF: %.3f s" % lidar_offset, (10, 55), cv2.FONT_HERSHEY_PLAIN, 2,
+                        (255, 0, 0), 1, cv2.LINE_AA)
+            cv2.putText(dst, "yaw_OFF: %.3f s" % (yaw_offset * 180.0 / np.pi), (10, 80),
+                        cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 1, cv2.LINE_AA)
+            if dst.all() is not None:
+                img_lidar_overlay = dst.copy()
 
-        dst = cv2.addWeighted(img_lidar_overlay, .5, img_lidar_overlay_orig,
-                            (1 - .5), 0.0)
-        cv2.putText(dst, "t_diff: %.3f s" % (abs(image_closest_stamp[0] - scan_closest_stamp[0])),
-                    (10, 30), cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 1,
-                    cv2.LINE_AA)
-        cv2.putText(dst, "t_OFF: %.3f s" % lidar_offset, (10, 55), cv2.FONT_HERSHEY_PLAIN, 2,
-                    (255, 0, 0), 1, cv2.LINE_AA)
-        cv2.putText(dst, "yaw_OFF: %.3f s" % (yaw_offset * 180.0 / np.pi), (10, 80),
-                    cv2.FONT_HERSHEY_PLAIN, 2, (255, 0, 0), 1, cv2.LINE_AA)
-        if dst.all() != None:
-            img_lidar_overlay = dst.copy()
+            path_overlay = os.path.join(out_path, "overlays")
 
-        path_overlay = os.path.join(out_path, "overlays")
+            if not os.path.exists(path_overlay):
+                os.makedirs(path_overlay)
 
-        if not os.path.exists(path_overlay):
-            os.makedirs(path_overlay)
+            path_overlay = os.path.join(
+                path_overlay, 'overlay_' + str(image_closest_stamp[0]) + '.png')
+            cv2.imwrite(path_overlay, img_lidar_overlay)
 
-        path_overlay = os.path.join(
-            path_overlay, 'overlay_' + str(image_closest_stamp[0]) + '.png')
-        cv2.imwrite(path_overlay, img_lidar_overlay)
+            # Get this from the next step
+            orientation = np.NAN
 
-        # Get this from the next step
-        orientation = np.NAN
+            lat = gps_buffer[gps_closest_index][0]
+            lon = gps_buffer[gps_closest_index][1]
+            elev = gps_buffer[gps_closest_index][-1]
 
-        lat = gps_buffer[gps_closest_index][0]
-        lon = gps_buffer[gps_closest_index][1]
-        elev = gps_buffer[gps_closest_index][-1]
+            row_list_to_dataframe.append(
+                {'seq_name' : seq_name,
+                'time_stamp' : scan_closest_stamp[0],
+                'img_path' : image_buffer[image_closest_index][1],
+                'overlay' : path_overlay,
+                'point_cloud' :  pts_cam.T,
+                'latitude' : lat,
+                'longitude' : lon,
+                'elevation' : elev,
+                'orientation' : orientation,
+                'slam_orientation' : np.array(imu_data[1]),
+                'slam_position' : np.array(imu_data[2])})
 
-        row_list_to_dataframe.append(
-            {'seq_name' : seq_name,
-             'time_stamp' : scan_closest_stamp[0],
-             'img_path' : image_buffer[image_closest_index][1],
-             'overlay' : path_overlay,
-             'point_cloud' :  pts_cam.T,
-             'latitude' : lat,
-             'longitude' : lon,
-             'elevation' : elev,
-             'orientation' : orientation,
-             'slam_orientation' : np.array(imu_data[1]),
-             'slam_position' : np.array(imu_data[2])})
+            progress.update(id_imu / n_imu_sample * 100.0)
 
-        progress.update(id_imu / len(imu_buffer) * 100)
-
-    progress.finish()
+        progress.finish()
 
     return pd.DataFrame(row_list_to_dataframe, columns=['seq_name',  'time_stamp', 'img_path',
                                'overlay', 'point_cloud', 'latitude', 'longitude', 'elevation', 'orientation',
@@ -374,7 +386,7 @@ def approximate_northing_from_slam_poses(df, dataset_path, debug=False):
             euler_enu = quaternionToEulerAngles([q_enu.w, q_enu.x, q_enu.y, q_enu.z])
 
             # ENU frame points to x-East. To get the angle to the north we must add 90 degrees positive.
-            orientations_northing.append(euler_enu[2] + np.pi / 2)
+            orientations_northing.append(euler_enu[2])
 
     df['orientation'] = orientations_northing
 
@@ -382,36 +394,72 @@ def create_progressbar():
     widgets = [' [', progressbar.Percentage(), '] ', progressbar.Bar(), ' (', progressbar.ETA(), ')']
     return progressbar.ProgressBar(widgets=widgets, maxval=100)
 
+def build_cinfo(filename, target_cam='cam0', opencv_yaml=False):
+    """Load a Kalibr or OpenCV yaml file as camera info."""
 
-def build_cinfo(filename):
-    """Load a yaml file as the camera info."""
+    cameraInfo = CameraInfo()  # Assuming you are using the class/namespace we discussed
 
-    cv_file = cv2.FileStorage(filename, cv2.FILE_STORAGE_READ)
+    if opencv_yaml:
+        cv_file = cv2.FileStorage(filename, cv2.FILE_STORAGE_READ)
+        cameraInfo.K = cv_file.getNode("camera_matrix").mat()
+        cameraInfo.D = cv_file.getNode("distortion_coefficients").mat()
+        # Add width/height for OpenCV yaml if they exist
+        cameraInfo.width = int(cv_file.getNode("image_width").real())
+        cameraInfo.height = int(cv_file.getNode("image_height").real())
+    else:
+        with open(filename, 'r') as f:
+            data = yaml.safe_load(f)
 
-    cameraInfo = CameraInfo()
-    cameraInfo.K = cv_file.getNode("camera_matrix").mat()
-    cameraInfo.D = cv_file.getNode("distortion_coefficients").mat()
-    cameraInfo.R = cv_file.getNode("rectification_matrix").mat()
-    cameraInfo.P = cv_file.getNode("projection_matrix").mat()
+        cam_data = data.get(target_cam)
+        if not cam_data:
+            raise ValueError(f"Camera {target_cam} not found in {filename}")
+
+        # 1. Map Resolution
+        res = cam_data.get('resolution', [0, 0])
+        cameraInfo.width = res[0]
+        cameraInfo.height = res[1]
+
+        # 2. Construct K (Camera Matrix)
+        # Kalibr format: [fx, fy, cx, cy]
+        intrinsics = cam_data.get('intrinsics', [])
+        if len(intrinsics) == 4:
+            fx, fy, cx, cy = intrinsics
+            cameraInfo.K = np.array([
+                [fx, 0, cx],
+                [0, fy, cy],
+                [0, 0, 1]
+            ], dtype=np.float64)
+
+        # Kalibr Radtan: [k1, k2, p1, p2]
+        cameraInfo.D = np.array(cam_data.get('distortion_coeffs', []), dtype=np.float64)
 
     return cameraInfo
 
+# Get camera info for the target image that we want, with a resize factor applied
+# (<1.0) and no distortion
+def resize_camera_info_and_rect_maps(src: CameraInfo, resize_factor=1.0): 
+    w = src.width
+    h = src.height
+    new_camera_matrix, _ = cv2.getOptimalNewCameraMatrix(src.K, src.D, (w, h), 1, (w, h))
 
-def build_cinfo(filename):
-    """Load a yaml file as the camera info."""
+    new_width = resize_factor * src.width
+    new_height = resize_factor * src.height
+    scaled_camera_matrix = new_camera_matrix.copy()
+    scaled_camera_matrix[0, 0] *= resize_factor
+    scaled_camera_matrix[1, 1] *= resize_factor  
+    scaled_camera_matrix[0, 2] *= resize_factor  
+    scaled_camera_matrix[1, 2] *= resize_factor
 
-    cv_file = cv2.FileStorage(filename, cv2.FILE_STORAGE_READ)
+    resized = CameraInfo()
+    resized.K = scaled_camera_matrix
+    resized.width = new_width
+    resized.height = new_height
+    resized.D = 0.0 * src.D 
 
-    cameraInfo = CameraInfo()
-    cameraInfo.height = 512  # cv_file.getNode("image_height").string()
-    cameraInfo.width = 688  # cv_file.getNode("image_width").string()
-    cameraInfo.distortion_model = cv_file.getNode("distortion_model").string()
-    cameraInfo.K = cv_file.getNode("camera_matrix").mat()
-    cameraInfo.D = cv_file.getNode("distortion_coefficients").mat()
-    cameraInfo.R = cv_file.getNode("rectification_matrix").mat()
-    cameraInfo.P = cv_file.getNode("projection_matrix").mat()
-
-    return cameraInfo
+    map_u, map_v = cv2.initUndistortRectifyMap(src.K, src.D, None, 
+                                             scaled_camera_matrix, (int(new_width), int(new_height)), cv2.CV_32FC1)
+                                             
+    return resized, map_u, map_v
 
 # With date as string, in format, e.g., "2021/07/08 12:01:55.200"
 # Return posix_time
@@ -445,33 +493,129 @@ def read_track(filename, min_quality=1):
 
     return data
 
-def seek_lidar_message_with_id_in_bagfile(bagfile, sequence_id, stamp,
+# Read all .pos files with global measurements from an input folder
+# This helps the case where there is not a clear association between sequence and .pos files
+def read_all_tracks(path_to_pos_files, min_quality=1):
+    data = []
+
+    GPS_EPOCH = datetime(1980, 1, 6)
+
+    for root, dirs, files in os.walk(path_to_pos_files):
+        for file in files:
+            if file.endswith(".pos"):
+                print("Reading from {}".format(file))
+                with open(os.path.join(path_to_pos_files, file), "r") as f:
+                    lines = f.readlines()
+                    for line in lines:
+                        tokens = line.split()
+                        if tokens[0] == "%":
+                            continue
+
+                        # To UTC time
+                        gps_week = int(tokens[0])
+                        gps_seconds = float(tokens[1])
+                        dt_gps = GPS_EPOCH + timedelta(weeks=gps_week, seconds=gps_seconds)
+
+                        # Subtract leap seconds to get UTC time
+                        dt_utc = dt_gps - timedelta(seconds=18) + timedelta(hours=2)
+
+                        # UTC to Sicily time zone
+                        rome_tz = pytz.timezone('Europe/Rome')
+                        dt_rome = dt_utc.astimezone(rome_tz)
+
+                        stamp = dt_rome.timestamp()
+
+                        quality = int(tokens[5])
+                        lat = float(tokens[2])
+                        lon = float(tokens[3])
+                        elev = float(tokens[4])
+
+                        if quality <= min_quality  :
+                            data.append([lat, lon, quality, 0.0, float(stamp), elev])
+
+    return data
+
+def parse_pointcloud2_agnostic(msg):
+    """
+    Parses a sensor_msgs.msg.PointCloud2 message into a structured numpy array.
+    Works for any field configuration.
+    """
+    # Map ROS PointField types to numpy types
+    # https://docs.ros.org/en/noetic/api/sensor_msgs/html/msg/PointField.html
+    # 1: INT8, 2: UINT8, 3: INT16, 4: UINT16, 5: INT32, 6: UINT32, 7: FLOAT32, 8: FLOAT64
+    type_map = {
+        1: np.int8, 2: np.uint8, 3: np.int16, 4: np.uint16,
+        5: np.int32, 6: np.uint32, 7: np.float32, 8: np.float64
+    }
+
+    formats = []
+    offsets = []
+    for field in msg.fields:
+        formats.append(type_map[field.datatype])
+        offsets.append(field.offset)
+
+    dtype_dict = {
+        'names': [f.name for f in msg.fields],
+        'formats': formats,
+        'offsets': offsets,
+        'itemsize': msg.point_step
+    }
+
+    pc_array = np.frombuffer(msg.data, dtype=np.dtype(dtype_dict))
+    x = pc_array['x'].astype(np.float32)
+    y = pc_array['y'].astype(np.float32)
+    z = pc_array['z'].astype(np.float32)
+    i = pc_array['intensity'].astype(np.float32)
+
+    return np.column_stack((x, y, z, i))
+
+def seek_lidar_message_with_id_in_bagfile(reader: AnyReader, 
+                                          sequence_id, stamp,
                                           lidar_topic, lidar_offset):
-    for topic, msg, ts in bagfile.read_messages(start_time = rospy.Time.from_sec(stamp - 1.0),
-                                                end_time = rospy.Time.from_sec(stamp + 1.0),
-                                                topics=[lidar_topic]):
-        if msg.header.seq == sequence_id:
-            time_stamp = msg.header.stamp.to_sec() + lidar_offset
-            point_cloud = []
+    # Convert float stamp (seconds) to nanoseconds for comparison
+    t0_ns = int((stamp - 1.0) * 1e9)
+    t1_ns = int((stamp + 1.0) * 1e9)
 
-            for p in pc2.read_points(msg, skip_nans=True):
-                point = [p[0], p[1], p[2], p[3]]
-                point_cloud.append(point)
+    # Filter connections for the specific lidar topic
+    connections = [x for x in reader.connections if x.topic == lidar_topic]
 
+    msg_generator = reader.messages(
+        connections=connections,
+        start=t0_ns,  # Fast jump starts here
+        stop=t1_ns  # Stop reading here
+    )
+
+    for connection, timestamp, rawdata in msg_generator:
+        msg = reader.deserialize(rawdata, connection.msgtype)
+
+        # Check for sequence ID (if available in your metadata/header)
+        if hasattr(msg.header, 'seq') and msg.header.seq == sequence_id:
+            msg_time = msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)
+            time_stamp = msg_time + lidar_offset
+
+            # Use the fast numpy parsing we discussed
+            point_cloud = parse_pointcloud2_agnostic(msg)
             return time_stamp, point_cloud
 
-def create_dataset(sequences, base_path, cinfo_path, debug_mode):
+    return None, None
 
-    yaw_offset = -0.04
-    lidar_buffer = []
-    image_buffer = []
-    gps_buffer = []
-    imu_buffer = []
+def create_dataset(sequences, path_to_params):
 
-    lidar_offset = 0.1
+    with open(path_to_params, 'rb') as f:
+        params = yaml.safe_load(f.read())
+
+    base_path = params['base_path']
+    cinfo_path = base_path + "/" + params['camchain_relative_path']
+    resize_factor = params['image_resize_factor']
+    debug_mode = params['debug']
+    covis_pixel_distance = params['create_dataset']['covisibility_max_pixel_difference']
+
+    yaw_offset = 0
+    lidar_offset = 0
     lidar_blend = .5
 
     left_cinfo = build_cinfo(cinfo_path)
+    left_cinfo_resized, map_u, map_v = resize_camera_info_and_rect_maps(left_cinfo, resize_factor)
 
     print("Reading from sequences: " + str(sequences))
 
@@ -479,16 +623,15 @@ def create_dataset(sequences, base_path, cinfo_path, debug_mode):
 
         lidar_buffer = []
         image_buffer = []
-        gps_buffer = []
 
         dataset_path = os.path.join(base_path, "dataset", seq_name)
         imu_path = os.path.join(base_path, "processed")
 
         imgs_dst = os.path.join(dataset_path, "images")
         overlay_dst = os.path.join(dataset_path, "overlays")
-        gps_path = os.path.join(base_path, "GT", seq_name, "global_lle.pos")
+        gps_path = os.path.join(base_path, "d-gnss")
 
-        bagfile_path = os.path.join(base_path, "Bagfiles", seq_name + ".bag")
+        bagfile_path = os.path.join(base_path, "bagfiles", seq_name + ".bag")
 
         print("Output folder: " + dataset_path)
         print("Reading GPS from {}".format(gps_path))
@@ -502,22 +645,26 @@ def create_dataset(sequences, base_path, cinfo_path, debug_mode):
         if not os.path.exists(overlay_dst):
             os.makedirs(overlay_dst)
 
-        bagfile = rosbag.Bag(bagfile_path, 'r')
-        cv = CvBridge()
+        bag_path = Path(bagfile_path)
+        reader = AnyReader([bag_path])
+        reader.open()
 
-        # t0 = rospy.Time.from_sec(bagfile.get_start_time() + 200.0)
-        # t1 = rospy.Time.from_sec(bagfile.get_start_time() + 300.0)
+        #t0_nanoseconds = reader.start_time + (200 * 1e9)
+        #t1_nanoseconds = reader.start_time + (300 * 1e9)
 
-        t0 = rospy.Time.from_sec(bagfile.get_start_time())
-        t1 = rospy.Time.from_sec(bagfile.get_end_time())
+        t0_nanoseconds = reader.start_time
+        t1_nanoseconds = reader.end_time
+
+        t0 = t0_nanoseconds * 1e-9
+        t1 = t1_nanoseconds * 1e-9
 
         print("Opened bagfile {} from {} to {}, with duration {}".format(
             str(bagfile_path),
-            datetime.fromtimestamp(t0.to_sec()).strftime("%H:%M:%S - %d:%m:%Y"),
-            datetime.fromtimestamp(t1.to_sec()).strftime("%H:%M:%S - %d:%m:%Y"),
-            str(t1.to_sec() - t0.to_sec()) + " [s]"))
+            datetime.fromtimestamp(t0).strftime("%H:%M:%S - %d/%m/%Y"),
+            datetime.fromtimestamp(t1).strftime("%H:%M:%S - %d/%m/%Y"),
+            str(t1 - t0) + " [s]"))
 
-        left_topic = "/stereo/left/image_rect"
+        left_topic = "/g319c_left/image_raw"
         lidar_topic = "/bf_lidar/points_raw"
 
         # Read poses from a SLAM algorithm, to get the missing orientation from the ground truth
@@ -529,11 +676,11 @@ def create_dataset(sequences, base_path, cinfo_path, debug_mode):
         imu_buffer = df_imu[['timestamp', 'rotation', 'position']].to_numpy().tolist()
 
         # Read GNSS track
-        gps_buffer = read_track(gps_path, imu_buffer[0][0])
+        gps_buffer = read_all_tracks(gps_path, 2)
         print("Loaded {} GPS measurements from {} to {}".format(
             len(gps_buffer),
-            datetime.fromtimestamp(gps_buffer[0][4]).strftime("%H:%M:%S - %d:%m:%Y"),
-            datetime.fromtimestamp(gps_buffer[-1][4]).strftime("%H:%M:%S - %d:%m:%Y")))
+            datetime.fromtimestamp(gps_buffer[0][4]).strftime("%H:%M:%S - %d/%m/%Y"),
+            datetime.fromtimestamp(gps_buffer[-1][4]).strftime("%H:%M:%S - %d/%m/%Y")))
 
         # Dump views of GNSS and SLAM, for debug
         if debug_mode:
@@ -551,27 +698,44 @@ def create_dataset(sequences, base_path, cinfo_path, debug_mode):
 
         print("Reading Images & LiDAR...")
 
-        duration = t1.to_sec() - t0.to_sec()
+        duration = t1 - t0
 
         progress = create_progressbar()
         progress.start()
 
-        covis_trigger = ImageCovisibilityTrigger(debug=False)
-        for topic, msg, ts in bagfile.read_messages(start_time=t0, end_time=t1, topics=[left_topic, lidar_topic]):
-            if topic == left_topic:
-                img_l = cv.imgmsg_to_cv2(msg, desired_encoding='mono8')
-                if covis_trigger.is_new_sample(img_l):
-                    time_stamp = msg.header.stamp.to_sec()
-                    path_img = imgs_dst + '/img' + str(time_stamp) + '.png'
-                    cv2.imwrite(path_img, img_l)
-                    image_buffer.append([time_stamp, path_img])
+        covis_trigger = ImageCovisibilityTrigger(debug=debug_mode, pixel_median_distance=30.0)
 
-            elif topic == lidar_topic:
-                time_stamp = msg.header.stamp.to_sec() + lidar_offset
-                lidar_buffer.append([time_stamp, msg.header.seq])
+        typestore = get_typestore(Stores.ROS1_NOETIC)
 
-            if str(int(ts.to_sec()))[-1] == '0':
-                progress.update(((ts.to_sec() - t0.to_sec()) / duration) * 100)
+        with AnyReader([Path(bagfile_path)], default_typestore=typestore) as reader:
+
+            connections = [x for x in reader.connections if x.topic in [left_topic, lidar_topic]]
+
+            for connection, timestamp, rawdata in reader.messages(connections=connections,
+                                                                  start=t0_nanoseconds, stop=t1_nanoseconds):
+                msg = reader.deserialize(rawdata, connection.msgtype)
+                topic = connection.topic
+
+                if topic == left_topic:
+                    img_l_raw = np.frombuffer(msg.data, dtype=np.uint8).reshape(msg.height, msg.width)
+                    img_l_color = cv2.cvtColor(img_l_raw, cv2.COLOR_BayerRG2RGB)
+                    img_l = cv2.remap(img_l_color, map_u, map_v, cv2.INTER_LINEAR)    
+
+                    #img_l = cv2.resize(img_l_color, (int(left_cinfo_resized.width), int(left_cinfo_resized.height)))
+
+                    if covis_trigger.is_new_sample(img_l):
+                        time_stamp = msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)
+
+                        path_img = f"{imgs_dst}/img{time_stamp:.6f}.png"
+                        cv2.imwrite(path_img, img_l)
+                        image_buffer.append([time_stamp, path_img])
+
+                elif topic == lidar_topic:
+                    msg_seq = getattr(msg.header, 'seq', 0)
+                    time_stamp = (msg.header.stamp.sec + (msg.header.stamp.nanosec * 1e-9)) + lidar_offset
+                    lidar_buffer.append([time_stamp, msg_seq])
+
+                progress.update(((float(timestamp)*1e-9 - t0) / duration) * 100)
 
         progress.finish()
 
@@ -583,18 +747,18 @@ def create_dataset(sequences, base_path, cinfo_path, debug_mode):
 
         print("Loaded {} Image measurements from {} to {}".format(
             len(image_buffer),
-            datetime.fromtimestamp(image_buffer[0][0]).strftime("%H:%M:%S - %d:%m:%Y"),
-            datetime.fromtimestamp(image_buffer[-1][0]).strftime("%H:%M:%S - %d:%m:%Y")))
+            datetime.fromtimestamp(image_buffer[0][0]).strftime("%H:%M:%S - %d/%m/%Y"),
+            datetime.fromtimestamp(image_buffer[-1][0]).strftime("%H:%M:%S - %d/%m/%Y")))
 
         print("Loaded {} LiDAR measurements from {} to {}".format(
             len(lidar_buffer),
-            datetime.fromtimestamp(lidar_buffer[0][0]).strftime("%H:%M:%S - %d:%m:%Y"),
-            datetime.fromtimestamp(lidar_buffer[-1][0]).strftime("%H:%M:%S - %d:%m:%Y")))
+            datetime.fromtimestamp(lidar_buffer[0][0]).strftime("%H:%M:%S - %d/%m/%Y"),
+            datetime.fromtimestamp(lidar_buffer[-1][0]).strftime("%H:%M:%S - %d/%m/%Y")))
 
         print("Pairing LiDAR and images...")
-        df = find_correspondences(seq_name, dataset_path, left_cinfo, lidar_topic, bagfile,
+        df = find_correspondences(seq_name, dataset_path, left_cinfo_resized, lidar_topic, bagfile_path,
                                   image_buffer, lidar_buffer, gps_buffer, imu_buffer, yaw_offset, lidar_offset,
-                                  False)
+                                  True)
         approximate_northing_from_slam_poses(df, dataset_path, debug_mode)
 
         # Save to disk
@@ -631,7 +795,10 @@ class ImageCovisibilityTrigger:
 
     def is_new_sample(self, image):
         kpts, desc = self.compute_keypoints_descriptors(image)
-
+        
+        if not kpts: 
+            return True
+        
         if self.image_reference is None:
             self.image_reference_kpts = kpts
             self.image_reference_desc = desc
@@ -649,7 +816,7 @@ class ImageCovisibilityTrigger:
                                           None, flags=cv2.DrawMatchesFlags_NOT_DRAW_SINGLE_POINTS)
             cv2.putText(img_matches, "Median: {:.2f}".format(np.median(pixel_diffs)), (50, 30), 1, 1, (255, 0, 0))
             cv2.imshow('Covisibility-based triggering', img_matches)
-            cv2.waitKey(0)
+            cv2.waitKey(10)
 
         if np.median(pixel_diffs) > self.pixel_median_distance:
             self.image_reference = image
@@ -662,20 +829,16 @@ if __name__ == "__main__":
 
     parser = argparse.ArgumentParser(
         description='Create S3LI dataset for training and testing')
-    parser.add_argument('path', type=str, help='path to base S3LI folder, as downloaded from the web')
-    parser.add_argument("left_cinfo", type=str,
-                        help="yaml file with left camera parameters")
-    parser.add_argument('--debug', dest='debug', action='store_true')
+    
+    parser.add_argument('params', type=str, help='path to the config.yaml file with all the parameters')
+    #parser.add_argument('path', type=str, help='path to base S3LI folder, as downloaded from the web')
+    #parser.add_argument("left_cinfo", type=str,
+    #                    help="yaml file with left camera parameters")
+    #parser.add_argument('--debug', dest='debug', action='store_true')
 
     args = parser.parse_args()
 
     # Load ground truth
-    sequences = ["s3li_traverse_1",
-                 "s3li_loops",
-                 "s3li_traverse_2",
-                 "s3li_crater",
-                 "s3li_crater_inout",
-                 "s3li_mapping",
-                 "s3li_landmarks"]
+    sequences = sequences_definition.sequences
 
-    create_dataset(sequences, args.path, args.left_cinfo, args.debug)
+    create_dataset(sequences, args.params)

@@ -17,10 +17,11 @@ import pandas as pd
 from bokeh.models import *
 from bokeh.plotting import *
 from bokeh.io import *
-from bokeh.tile_providers import *
+from bokeh.tile_providers import ESRI_IMAGERY
 from bokeh.palettes import *
 from bokeh.transform import *
 from bokeh.models import Arrow, OpenHead
+import sequences_definition
 
 import os
 import argparse
@@ -174,13 +175,7 @@ if __name__ == "__main__":
     scale = 1
 
     # All possible sequences
-    sequences = ["s3li_traverse_1",
-                 "s3li_loops",
-                 "s3li_traverse_2",
-                 "s3li_crater",
-                 "s3li_crater_inout",
-                 "s3li_mapping",
-                 "s3li_landmarks"]
+    sequences = sequences_definition.sequences
 
     # Get colormap (1 color / sequence)
     mapper = create_colormap_for_sequences(sequences)
@@ -216,7 +211,7 @@ if __name__ == "__main__":
 
     p.grid.visible = True
 
-    m = p.add_tile(get_provider(ESRI_IMAGERY))
+    m = p.add_tile(ESRI_IMAGERY)
     m.level = 'underlay'
 
     p.xaxis.visible = False
@@ -255,8 +250,8 @@ if __name__ == "__main__":
         renderers=[circle])
 
     p.add_tools(event_hover)
-    
-    show(p)
 
     print(os.path.join(args.base_path, 's3li_map.html'))
     output_file(str(os.path.join(args.base_path, 's3li_map.html')))
+
+    show(p)

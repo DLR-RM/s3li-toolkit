@@ -2,20 +2,14 @@ import pandas as pd
 import argparse
 import pickle
 import numpy
+import yaml
 import os
+from sequences_definition import sequences
 
 pd.set_option("display.float_format", '{:.3f}'.format)
 pd.set_option("display.width", 0)
 
 from sympy.strategies.core import switch
-
-sequences = ["s3li_traverse_1",
-             "s3li_loops",
-             "s3li_traverse_2",
-             "s3li_crater",
-             "s3li_crater_inout",
-             "s3li_mapping",
-             "s3li_landmarks"]
 
 # Careful! Quaternion is inverted. Check that with the actual result text!
 def read_results_tum_format(path):
@@ -25,9 +19,9 @@ def read_results_tum_format(path):
         df["timestamp"] = data[:, 0]
         q = data[:, 4:8]
         df["rotation"] = numpy.column_stack((
-            numpy.array(q[:, 3]), 
-            numpy.array(q[:, 0]), 
-            numpy.array(q[:, 1]), 
+            numpy.array(q[:, 3]),
+            numpy.array(q[:, 0]),
+            numpy.array(q[:, 1]),
             numpy.array(q[:, 2]))).tolist()
         df["position"] = data[:, 1:4].tolist()
         print(df)
@@ -37,31 +31,33 @@ def read_results_tum_format(path):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Transform .txt of S3LI SLAM results to Panda Dataframes')
-    parser.add_argument('path', type=str, help='path to results (Eval) folder')
-    parser.add_argument("algorithm", type=str, help="SLAM algorithm for the camera pose."
-                                                    "Must match a subfolder of path")
+    parser.add_argument('config', type=str, help="path to config file")
     args = parser.parse_args()
+    with open(args.config, 'rb') as f:
+         params = yaml.safe_load(f.read())
+    algorithm = "rvio2"
+    path = params["base_path"]
 
-    if "ORB" in args.algorithm:
+    if "ORB" in algorithm:
         pass
 
-    if "BASALT" in args.algorithm:
+    if "BASALT" in algorithm or "rvio2" in algorithm:
         for sequence in sequences:
-            for root, dirs, files in os.walk(os.path.join(args.path, 'Eval', args.algorithm, sequence)):
+            for root, dirs, files in os.walk(os.path.join(path, 'eval', algorithm, sequence)):
                 for file in files:
                     if file.endswith(".txt"):
                         print("Reading from {}".format(file))
-                        df = read_results_tum_format(os.path.join(args.path, 'Eval', args.algorithm, sequence, file))
+                        df = read_results_tum_format(os.path.join(path, 'eval', algorithm, sequence, file))
 
-                        if not os.path.isdir(os.path.join(args.path, "processed")):
-                            os.mkdir(os.path.join(args.path, "processed"))
+                        if not os.path.isdir(os.path.join(path, "processed")):
+                            os.mkdir(os.path.join(path, "processed"))
 
-                        with open(os.path.join(args.path, "processed", sequence + '_poses.pkl'), 'wb') as handle:
+                        with open(os.path.join(path, "processed", sequence + '_poses.pkl'), 'wb') as handle:
                             print(handle)
                             pickle.dump(df, handle, protocol=pickle.HIGHEST_PROTOCOL)
 
-    elif "OPEN_VINS" in args.algorithm:
+    elif "OPEN_VINS" in algorithm:
         pass
-    elif "VINS" in args.algorithm:
+    elif "VINS" in algorithm:
         pass
 

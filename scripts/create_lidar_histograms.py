@@ -1,10 +1,11 @@
 import argparse
 import os
+import yaml
 import numpy as np
 import matplotlib.pyplot as plt
 from progressbar import ProgressBar
 import pandas as pd
-
+import sequences_definition
 
 def create_progressbar():
     return ProgressBar(maxval=100)
@@ -44,7 +45,7 @@ def process_lidar_histograms(sequences, base_path, output_folder="histograms"):
 
         print(f"Processing {len(df)} entries...")
 
-        # Setup progress bar
+        # Setup #progress bar
         progress = create_progressbar()
         progress.start()
 
@@ -92,7 +93,6 @@ def process_lidar_histograms(sequences, base_path, output_folder="histograms"):
         # Save updated DataFrame back to pickle
         df.to_pickle(pickle_path)
         print(f"Updated pickle file with histogram paths: {pickle_path}")
-
         print(f"Finished processing {seq_name}")
         print(f"Processed timestamps from {df['time_stamp'].min():.2f} to {df['time_stamp'].max():.2f}")
         print(f"Histograms saved to: {hist_dst}")
@@ -101,18 +101,18 @@ def process_lidar_histograms(sequences, base_path, output_folder="histograms"):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description='Create LiDAR histogram images from S3LI dataset pickle files')
-    parser.add_argument('path', type=str, help='path to base S3LI folder')
+    parser.add_argument('params', type=str, help='path to params')
     parser.add_argument('--output', type=str, default='histograms',
                         help='name of the output folder for histogram images')
 
     args = parser.parse_args()
 
-    sequences = ["s3li_traverse_2",
-                 "s3li_loops",
-                 "s3li_traverse_1",
-                 "s3li_crater",
-                 "s3li_crater_inout",
-                 "s3li_mapping",
-                 "s3li_landmarks"]
+    args = parser.parse_args()
+    with open(args.params, 'rb') as f:
+        params = yaml.safe_load(f.read())
 
-    process_lidar_histograms(sequences, args.path, args.output)
+    base_path = params['base_path']
+
+    sequences = sequences_definition.sequences
+
+    process_lidar_histograms(sequences, base_path, args.output)
