@@ -1,0 +1,39 @@
+# General parameters
+base_path: "/home_local/giub_ri/s3li-vulcano"
+camchain_relative_path: "cfgs/kalibr_stereo_inertial_calibration/vulcano_stereorgb_imu_lidar_2023-07-05-17-43-18-camchain.yaml"
+
+# If images are too large, then resize
+image_resize_factor: 0.25
+debug: False
+
+# Node-specific params (create_dataset.py)
+create_dataset: 
+  covisibility_max_pixel_difference: 30.0
+  crop_with_stamp: False
+  min_stamp: 0.0
+  max_stamp: 10000000000000000.0
+
+# Node-specific params (interactive_overlap_maps.py)
+interactive_overlap_maps:
+  # Process 1 every {skip} samples for visualization
+  skip: 1
+ 
+  # type 1 is heuristics about direction 
+  # type 2 is range-aided, with polygon overlap --> recommended option!
+  overlap_comp_type: 2
+
+  # overrides for lidar range constraint for overlap type 2
+  override_lidar_range: True
+  min_fov_range: 3.0
+  max_fov_range: 20.0
+
+  # Choose between "none", "decay", "threshold"
+  penalize_large_angles_method: "threshold" 
+  cross_view_angle_threshold: 45.0 # degrees
+  min_timeout_between_samples: 30.0 # seconds
+
+  # Min overlap value to dump positive samples for GT
+  min_overlap_for_positive_match: 0.5
+
+  # Toggle bokeh plot in browser
+  plot_in_browser: False
