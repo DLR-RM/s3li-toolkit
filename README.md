@@ -1,14 +1,22 @@
 # S3LI Interface
-This package provides useful tools and scripts for playback and preparation of the  S3LI dataset. 
+This package provides useful tools and scripts for playback and preparation of the S3LI dataset. 
 
-** Are you looking for the S3LI-Vulcano release? Stay tuned, code is going to be updated soon.. **
+This repo relates to the **S3LI Vulcano** release, for the Etna dataset, go back to the main branch. 
 
 Links: 
 - https://datasets.arches-projekt.de/s3li_dataset/
+- https://arxiv.org/abs/2601.19557
 - https://ieeexplore.ieee.org/document/9813579
 
 If you find this package useful for your work, consider to cite 
 ```
+@article{giubilato2026s3li,
+  title={The S3LI Vulcano Dataset: A Dataset for Multi-Modal SLAM in Unstructured Planetary Environments},
+  author={Giubilato, Riccardo and M{\"u}ller, Marcus Gerhard and Sewtz, Marco and Gonzalez, Laura Alejandra Encinar and Folkesson, John and Triebel, Rudolph},
+  journal={2026 IEEE Aerospace Conference},
+  year={2026}
+}
+
 @ARTICLE{9813579,
   author={Giubilato, Riccardo and Stürzl, Wolfgang and Wedler, Armin and Triebel, Rudolph},
   journal={IEEE Robotics and Automation Letters}, 
@@ -19,7 +27,6 @@ If you find this package useful for your work, consider to cite
   pages={8721-8728},
   doi={10.1109/LRA.2022.3188118}
 }
-
 ```
 
 ## Generation of train and test datasets for place recognition
@@ -31,7 +38,7 @@ with $I_{left}$ the left camera image, $L$ a lidar scan, $p_{D-GNSS}$ the ground
 Download the dataset :) (https://datasets.arches-projekt.de/s3li_dataset/)
 
 ### 2. Set-Up
-This code was tested using Python 3.9.21 and ROS1 Melodic on openSUSE Leap 15.5. To start, clone the repository and then use the provided requirements.txt to install the dependencies:
+This code was tested using Python 3.12 on Ubuntu 24.04. To start, clone the repository and then use the provided requirements.txt to install the dependencies:
 
 `pip install -r requirements.txt`
 
@@ -45,7 +52,7 @@ The script `slam_poses_to_pandas.py` reads the output `.txt` files from the `Eva
 | posix_time [s]  | Quaternion **(w, x, y, z)**    | [x, y, z] |
 
 Usage:
-1) From the root package folder: ```python3 scripts/slam_poses_to_pandas.py ${path_to_s3li_dataset_root} ${which_algorithm}``` (e.g., ```python3 scripts/slam_poses_to_pandas.py /home_local/giub_ri/s3li_dataset BASALT_STEREO_INERTIAL```)
+1) From the root package folder: ```python3 scripts/slam_poses_to_pandas.py ${path_to_config}``` (e.g., ```python3 scripts/slam_poses_to_pandas.py cfg/config.yaml```)
 2) This will write pickle files in a folder names `processed` from the root dataset path
 
 ### 4. Sample Generation
@@ -53,19 +60,19 @@ This step foresees the generation of all data samples for each sequence. The scr
 In this step, the results of SLAM evaluations, pre-processed in Sec.2, are used to approximate an orientation (with respect to the North) for each image/scan pair, as the ground truth is only from D-GNSS without magnetometer or full RTK. To account for the yaw-drift, which is inevitable in the context of V-SLAM, camera trajectories are split in an user-defined manner (default is 3 splits) and independently aligned to the ground truth (x, y, z in ENU frame). The corresponding rotation is applied to the camera poses, and the northing is stored.
 
 Usage: 
-1) From the package root: ```python3 scripts/create_dataset.py ${path_to_s3li_dataset_root} ${camera_config}``` (e.g. ```python3 scripts/create_dataset.py /home_local/giub_ri/s3li_dataset/ cfg/cam0_pinhole.yaml```)
+1) From the package root: ```python3 scripts/create_dataset.py ${path_to_config}``` (e.g. ```python3 scripts/create_dataset.py cfg/config.yaml```)
 
 ### 5. Lidar Histograms Generation
 This script `create_lidar_histograms.py` processes LiDAR point cloud data stored in the pickle files and generates histograms representing the distribution of depth (Z-axis) values. The generated histograms will later be used in the visualization of the interactive plot.
 
 Usage:
-1) From the package root:```python3 scripts/create_lidar_histograms.py ${path_to_s3li_dataset_root}```
+1) From the package root:```python3 scripts/create_lidar_histograms.py ${path_to_config}```
 `
 ### 6. Visualization
 The results can be qualitatively inspected using the provided script `make_maps_in_bokeh.py`, which overlays subsampled images (with LiDAR point projections) on geo-references positions in an interactive map. 
 
 Usage: 
-1) From the package root: ```python3 scripts/make_maps_in_bokeh.py ${path_to_s3li_dataset_root}/dataset/ ${skip}```
+1) From the package root: ```python3 scripts/make_maps_in_bokeh.py ${path_to_config}```
 
 This will look in the dataset folders for saved pickles, that contain a dataframe for each entire bagfile, and create an interactive Bokeh plot showing the global position and orientation of collected image/scan samples and pre-vieweing the image with lidar overlay when hovering with the mouse cursor. 
 
@@ -85,7 +92,7 @@ The script `interactive_overlap_maps.py` calculates the overlap between differen
 In addition, it considers occlusion detection by analyzing LiDAR depth data to adjust camera field-of-view ranges.
 
 Usage:
-1) From the package root: ```python3 scripts/interactive_overlap_maps.py  ${path_to_s3li_dataset_root}/dataset/ ${skip} ${compute_overlap_version}``` (e.g. ```python3 scripts/interactive_overlap_maps.py /home_local/enci_la/Etna/dataset/ 50 2```)
+1) From the package root: ```python3 scripts/interactive_overlap_maps.py  ${path_to_config}``` (e.g. ```python3 scripts/interactive_overlap_maps.py cfg/config.yaml```)
 
 Example Bokeh plot:
 ![bokeh_plot](doc/interactive_overlap_maps.png)
