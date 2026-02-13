@@ -36,7 +36,7 @@ def generate_launch_description():
             'right_camera_info_topic': 'g319c_right/camera_info',
             'rescale': 0.25,
             'rescale_disp': 0.0,
-            'visualize': False
+            'visualize': True
         }],
         output='screen'
     )
