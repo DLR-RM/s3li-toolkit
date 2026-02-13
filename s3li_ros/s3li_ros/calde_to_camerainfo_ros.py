@@ -4,7 +4,7 @@ from rclpy.node import Node
 from rclpy.duration import Duration
 from sensor_msgs.msg import CameraInfo
 from std_msgs.msg import Header
-from s3li_vulcano_tools_python.calde_parser import parse_calibration_file, parse_matrix
+from s3li_ros.calde_parser import parse_calibration_file, parse_matrix
 import numpy as np
 
 
