@@ -16,7 +16,7 @@ create_dataset:
 # Node-specific params (interactive_overlap_maps.py)
 interactive_overlap_maps:
   # Process 1 every {skip} samples for visualization
-  skip: 1
+  skip: 10
  
   # type 1 is heuristics about direction 
   # type 2 is range-aided, with polygon overlap --> recommended option!
@@ -36,4 +36,4 @@ interactive_overlap_maps:
   min_overlap_for_positive_match: 0.5
 
   # Toggle bokeh plot in browser
-  plot_in_browser: False
+  plot_in_browser: True
