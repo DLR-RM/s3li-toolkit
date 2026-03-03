@@ -76,12 +76,6 @@ Usage:
 
 This will look in the dataset folders for saved pickles, that contain a dataframe for each entire bagfile, and create an interactive Bokeh plot showing the global position and orientation of collected image/scan samples and pre-vieweing the image with lidar overlay when hovering with the mouse cursor. 
 
-Example Bokeh plot, full view: 
-![bokeh_plot](doc/bokeh_plot.png)
-
-Detail of the Bokeh plot, with data preview: 
-![bokeh_plot](doc/bokeh_detail.png)
-
 ### 7. Interactive plot
 Visual analysis interactive tool for camera overlap. 
 The script `interactive_overlap_maps.py` calculates the overlap between different camera views using two possible methods:
