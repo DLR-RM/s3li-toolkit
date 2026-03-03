@@ -3,31 +3,12 @@ This package provides useful tools and scripts for playback and preparation of t
 
 This repo relates to the **S3LI Vulcano** release, for the Etna dataset, go back to the main branch. 
 
-Links: 
-- https://rmc.dlr.de/s3li_dataset  <-- Download dataset here!
-- https://arxiv.org/abs/2601.19557
-- https://ieeexplore.ieee.org/document/9813579
+![bokeh_plot](doc/s3li_banner.gif)
 
-If you find this package useful for your work, consider to cite 
-```
-@article{giubilato2026s3li,
-  title={The S3LI Vulcano Dataset: A Dataset for Multi-Modal SLAM in Unstructured Planetary Environments},
-  author={Giubilato, Riccardo and M{\"u}ller, Marcus Gerhard and Sewtz, Marco and Gonzalez, Laura Alejandra Encinar and Folkesson, John and Triebel, Rudolph},
-  journal={2026 IEEE Aerospace Conference},
-  year={2026}
-}
+[![arXiv](https://img.shields.io/badge/arXiv-2601.19557-b31b1b.svg)](https://arxiv.org/abs/2601.19557)
+[![Data](https://img.shields.io/badge/Data-S3LI--Vulcano-green?logo=databricks&logoColor=white)](https://rmc.dlr.de/s3li_dataset)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-@ARTICLE{9813579,
-  author={Giubilato, Riccardo and Stürzl, Wolfgang and Wedler, Armin and Triebel, Rudolph},
-  journal={IEEE Robotics and Automation Letters}, 
-  title={Challenges of SLAM in Extremely Unstructured Environments: The DLR Planetary Stereo, Solid-State LiDAR, Inertial Dataset}, 
-  year={2022},
-  volume={7},
-  number={4},
-  pages={8721-8728},
-  doi={10.1109/LRA.2022.3188118}
-}
-```
 
 ## Generation of train and test datasets for place recognition
 The package provides two scripts to scrim the bagfiles and generate datasets with synchronized tuples of:
@@ -35,7 +16,7 @@ $$(I_{left}, L, p_{D-GNSS}, \phi_{north})$$
 with $I_{left}$ the left camera image, $L$ a lidar scan, $p_{D-GNSS}$ the ground truth position in global coordinates, measured with a differential GNSS setup, and $\phi_{north}$ the orientation of the camera to the north.
 
 ### 1. Preparation
-Download the dataset :) (https://datasets.arches-projekt.de/s3li_dataset/)
+Download the dataset :) 
 
 ### 2. Set-Up
 This code was tested using Python 3.12 on Ubuntu 24.04. To start, clone the repository and then use the provided requirements.txt to install the dependencies:
@@ -76,12 +57,6 @@ Usage:
 
 This will look in the dataset folders for saved pickles, that contain a dataframe for each entire bagfile, and create an interactive Bokeh plot showing the global position and orientation of collected image/scan samples and pre-vieweing the image with lidar overlay when hovering with the mouse cursor. 
 
-Example Bokeh plot, full view: 
-![bokeh_plot](doc/bokeh_plot.png)
-
-Detail of the Bokeh plot, with data preview: 
-![bokeh_plot](doc/bokeh_detail.png)
-
 ### 7. Interactive plot
 Visual analysis interactive tool for camera overlap. 
 The script `interactive_overlap_maps.py` calculates the overlap between different camera views using two possible methods:
@@ -95,4 +70,25 @@ Usage:
 1) From the package root: ```python3 scripts/interactive_overlap_maps.py  ${path_to_config}``` (e.g. ```python3 scripts/interactive_overlap_maps.py cfg/config.yaml```)
 
 Example Bokeh plot:
-![bokeh_plot](doc/interactive_overlap_maps.png)
+![bokeh_plot](doc/toolkit.gif)
+
+If you find this project useful for your work, consider to cite 
+```
+@article{giubilato2026s3li,
+  title={The S3LI Vulcano Dataset: A Dataset for Multi-Modal SLAM in Unstructured Planetary Environments},
+  author={Giubilato, Riccardo and M{\"u}ller, Marcus Gerhard and Sewtz, Marco and Gonzalez, Laura Alejandra Encinar and Folkesson, John and Triebel, Rudolph},
+  journal={2026 IEEE Aerospace Conference},
+  year={2026}
+}
+
+@ARTICLE{9813579,
+  author={Giubilato, Riccardo and Stürzl, Wolfgang and Wedler, Armin and Triebel, Rudolph},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={Challenges of SLAM in Extremely Unstructured Environments: The DLR Planetary Stereo, Solid-State LiDAR, Inertial Dataset}, 
+  year={2022},
+  volume={7},
+  number={4},
+  pages={8721-8728},
+  doi={10.1109/LRA.2022.3188118}
+}
+```
