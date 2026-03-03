@@ -54,5 +54,6 @@ install(PROGRAMS s3li_ros/calde_to_camerainfo_ros.py
 ament_python_install_package(${PROJECT_NAME})
 
 install(DIRECTORY launch DESTINATION share/${PROJECT_NAME})
+install(DIRECTORY cfg DESTINATION share/${PROJECT_NAME})
 
 ament_package()
