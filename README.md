@@ -35,7 +35,7 @@ $$(I_{left}, L, p_{D-GNSS}, \phi_{north})$$
 with $I_{left}$ the left camera image, $L$ a lidar scan, $p_{D-GNSS}$ the ground truth position in global coordinates, measured with a differential GNSS setup, and $\phi_{north}$ the orientation of the camera to the north.
 
 ### 1. Preparation
-Download the dataset :) (https://datasets.arches-projekt.de/s3li_dataset/)
+Download the dataset :) 
 
 ### 2. Set-Up
 This code was tested using Python 3.12 on Ubuntu 24.04. To start, clone the repository and then use the provided requirements.txt to install the dependencies:
@@ -95,4 +95,4 @@ Usage:
 1) From the package root: ```python3 scripts/interactive_overlap_maps.py  ${path_to_config}``` (e.g. ```python3 scripts/interactive_overlap_maps.py cfg/config.yaml```)
 
 Example Bokeh plot:
-![bokeh_plot](doc/interactive_overlap_maps.png)
+![bokeh_plot](doc/toolkit.gif)
