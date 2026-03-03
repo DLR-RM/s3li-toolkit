@@ -3,31 +3,12 @@ This package provides useful tools and scripts for playback and preparation of t
 
 This repo relates to the **S3LI Vulcano** release, for the Etna dataset, go back to the main branch. 
 
-Links: 
-- https://rmc.dlr.de/s3li_dataset  <-- Download dataset here!
-- https://arxiv.org/abs/2601.19557
-- https://ieeexplore.ieee.org/document/9813579
+![bokeh_plot](doc/s3li_banner.gif)
 
-If you find this package useful for your work, consider to cite 
-```
-@article{giubilato2026s3li,
-  title={The S3LI Vulcano Dataset: A Dataset for Multi-Modal SLAM in Unstructured Planetary Environments},
-  author={Giubilato, Riccardo and M{\"u}ller, Marcus Gerhard and Sewtz, Marco and Gonzalez, Laura Alejandra Encinar and Folkesson, John and Triebel, Rudolph},
-  journal={2026 IEEE Aerospace Conference},
-  year={2026}
-}
+[![arXiv](https://img.shields.io/badge/arXiv-2601.19557-b31b1b.svg)](https://arxiv.org/abs/2601.19557)
+[![Data](https://img.shields.io/badge/Data-S3LI--Vulcano-green?logo=databricks&logoColor=white)](https://rmc.dlr.de/s3li_dataset)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-@ARTICLE{9813579,
-  author={Giubilato, Riccardo and Stürzl, Wolfgang and Wedler, Armin and Triebel, Rudolph},
-  journal={IEEE Robotics and Automation Letters}, 
-  title={Challenges of SLAM in Extremely Unstructured Environments: The DLR Planetary Stereo, Solid-State LiDAR, Inertial Dataset}, 
-  year={2022},
-  volume={7},
-  number={4},
-  pages={8721-8728},
-  doi={10.1109/LRA.2022.3188118}
-}
-```
 
 ## Generation of train and test datasets for place recognition
 The package provides two scripts to scrim the bagfiles and generate datasets with synchronized tuples of:
@@ -90,3 +71,24 @@ Usage:
 
 Example Bokeh plot:
 ![bokeh_plot](doc/toolkit.gif)
+
+If you find this project useful for your work, consider to cite 
+```
+@article{giubilato2026s3li,
+  title={The S3LI Vulcano Dataset: A Dataset for Multi-Modal SLAM in Unstructured Planetary Environments},
+  author={Giubilato, Riccardo and M{\"u}ller, Marcus Gerhard and Sewtz, Marco and Gonzalez, Laura Alejandra Encinar and Folkesson, John and Triebel, Rudolph},
+  journal={2026 IEEE Aerospace Conference},
+  year={2026}
+}
+
+@ARTICLE{9813579,
+  author={Giubilato, Riccardo and Stürzl, Wolfgang and Wedler, Armin and Triebel, Rudolph},
+  journal={IEEE Robotics and Automation Letters}, 
+  title={Challenges of SLAM in Extremely Unstructured Environments: The DLR Planetary Stereo, Solid-State LiDAR, Inertial Dataset}, 
+  year={2022},
+  volume={7},
+  number={4},
+  pages={8721-8728},
+  doi={10.1109/LRA.2022.3188118}
+}
+```
