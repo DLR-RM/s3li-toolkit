@@ -18,7 +18,7 @@ def generate_launch_description():
         executable='calde_to_camerainfo_ros.py',
         name='calde_to_camerainfo',
         parameters=[{
-            'calibration_file': calib_config,  # Questo è l'unico dinamico
+            'calibration_file': calib_config, 
             'left_namespace': 'g319c_left',
             'right_namespace': 'g319c_right'
         }],
