@@ -49,9 +49,9 @@ mkdir -p ~/s3li_ws/src
 cd ~/s3li_ws/src
 git clone https://github.com/DLR-RM/s3li-toolkit.git
 cd ..
-colcon build --packages-select s3li_ros2
+colcon build
 source install/setup.bash 
-ros2 launch s3li_ros2 s3li_node.launch.py
+ros2 launch s3li_ros s3li_launch.py ${path_to_.cal_file}
 ```
 ## Generation of train and test datasets for place recognition
 The package provides two scripts to scrim the bagfiles and generate datasets with synchronized tuples of:
