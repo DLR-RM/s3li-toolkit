@@ -53,6 +53,9 @@ colcon build
 source install/setup.bash 
 ros2 launch s3li_ros s3li_launch.py ${path_to_.cal_file}
 ```
+
+The ROS2 package is developed and tested under ROS2 Jazzy and Ubuntu 24.04 
+
 ## Generation of train and test datasets for place recognition
 The package provides scripts to skim through the bagfiles and generate datasets with synchronized tuples of:
 $$(I_{left}, L, p_{D-GNSS}, \phi_{north})$$
