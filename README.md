@@ -54,7 +54,7 @@ source install/setup.bash
 ros2 launch s3li_ros s3li_launch.py ${path_to_.cal_file}
 ```
 ## Generation of train and test datasets for place recognition
-The package provides two scripts to scrim the bagfiles and generate datasets with synchronized tuples of:
+The package provides scripts to skim through the bagfiles and generate datasets with synchronized tuples of:
 $$(I_{left}, L, p_{D-GNSS}, \phi_{north})$$
 with $I_{left}$ the left camera image, $L$ a lidar scan, $p_{D-GNSS}$ the ground truth position in global coordinates, measured with a differential GNSS setup, and $\phi_{north}$ the orientation of the camera to the north.
 
@@ -102,11 +102,7 @@ This will look in the dataset folders for saved pickles, that contain a datafram
 
 ### 7. Interactive plot
 Visual analysis interactive tool for camera overlap. 
-The script `interactive_overlap_maps.py` calculates the overlap between different camera views using two possible methods:
-
-- An angle-based approach (compute_overlap_v1)
-- A polygon intersection approach (compute_overlap_v2)
-
+The script `interactive_overlap_maps.py` calculates the overlap between different camera views to define positive samples for place recognition.
 In addition, it considers occlusion detection by analyzing LiDAR depth data to adjust camera field-of-view ranges.
 
 Usage:
