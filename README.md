@@ -10,6 +10,49 @@ This repo relates to the **S3LI Vulcano** release, for the Etna dataset, go back
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
+## ROS2 Interface 
+We provide a "starter" interface to play the data back, and inspect the bagfile content. 
+The `s3li_ros` folder is a ROS2 package that provides a launchfile to execute the following components: 
+- `calde_to_camerainfo_ros.py`: a node that reads camera calibration files (in DLR CalDe/CalLab format) and republishes camera_info messages 
+- `stereo_disparity_node`: subscribes to the raw images and camera info messages, performs stereo rectification and publishes depth images. Optionally (recommended), the node first downsamples the input images with a custom factor ($(u´, v´) = f * (u, v)$, with f preset to 0.25)
+- static tf publishers for the following transformations: 
+  - `camera_left -> camera_right`
+  - `camera_left -> lidar`
+  - `imu -> camera_left`
+
+LiDAR messages are provide as recorded from the sensor. Published messages, as `PointCloud2` comprise the following point fields: 
+```
+N° Points:  17400
+Point Step: 28 bytes
+
+FIELDS:
+ - Name: x                 | Offset: 0   | Datatype: float32 
+ - Name: y                 | Offset: 4   | Datatype: float32
+ - Name: z                 | Offset: 8   | Datatype: float32  
+ - Name: intensity         | Offset: 12  | Datatype: uint32  
+ - Name: ambient_light     | Offset: 16  | Datatype: uint32  
+ - Name: point_id          | Offset: 20  | Datatype: uint32  
+ - Name: point_time_offset | Offset: 24  | Datatype: uint32  
+```
+Spurious measurements can be filtered out setting thresholds on the `intensity` field. As an example check the `inspect_pt_and_filter.py` script.
+LiDAR messages are PTP synchronized with the clock of the main pc, to which cameras are synchronized too with the same mechanism. The XSens-IMU, connected via USB, however, is not. To properly synchronize therefore LiDAR messages with IMU readings, consider to rely on the time offset of `0.009` seconds estimated between camera and IMU messages with Kalibr (files in the data folder). 
+
+To use the ROS2 interface, first convert the bagfiles: 
+```
+pip install rosbags
+rosbags-convert ${input_ros1_bag}
+```
+
+then clone and build the `s3li-toolkit` and its `s3li_ros2` package: 
+```
+mkdir -p ~/s3li_ws/src
+cd ~/s3li_ws/src
+git clone https://github.com/DLR-RM/s3li-toolkit.git
+cd ..
+colcon build --packages-select s3li_ros2
+source install/setup.bash 
+ros2 launch s3li_ros2 s3li_node.launch.py
+```
 ## Generation of train and test datasets for place recognition
 The package provides two scripts to scrim the bagfiles and generate datasets with synchronized tuples of:
 $$(I_{left}, L, p_{D-GNSS}, \phi_{north})$$
